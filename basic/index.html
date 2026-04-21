@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{}</title>
+<!--
+  TouchDesigner Web Render TOP - Controller
+  ==========================================
+  TD 설정:
+  1. Web Render TOP → URL에 이 파일 경로 / Resolution: 1920x1080 / Interact Mouse: ON
+  2. Info DAT 연결 → json.loads(op('info1')['title',1].val) 로 값 읽기
+  3. (선택) WebSocket DAT port 9980 → onReceiveText에서 json.loads(message)
+  4. TD→HTML: op('webrender1').executeJavaScript("setSlider(0, 0.5)")
+-->
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: #131316; color: #b0b0b0;
+  font-family: system-ui, -apple-system, sans-serif;
+  user-select: none; touch-action: none; -webkit-user-select: none;
+}
+#app {
+  width: 100%; height: 100%;
+  display: grid;
+  grid-template-rows: 1fr 120px;
+  gap: 8px;
+  padding: 10px;
+}
+
+/* ── Top ── */
+.top-section {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* ── Sliders ── */
+.sliders-section {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 5px;
+  min-height: 0;
+}
+.slider-strip {
+  background: #1e1e22;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 6px 10px;
+  gap: 8px;
+  min-height: 0;
+}
+.slider-label {
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 1px; color: #666;
+  flex-shrink: 0;
+}
+
+/* ── Fader ── */
+.fader-container {
+  flex: 1; width: 100%;
+  display: flex; justify-content: center; align-items: stretch;
+  min-height: 0;
+}
+.fader-track {
+  width: 36px; background: #0a0a0c;
+  border-radius: 4px; position: relative; cursor: pointer;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+}
+.fader-fill {
+  position: absolute; bottom: 0; left: 0; width: 100%;
+  background: linear-gradient(to top, #0055dd, #00aaff);
+  border-radius: 0 0 4px 4px;
+  will-change: height; pointer-events: none;
+}
+.fader-thumb {
+  position: absolute; left: -8px; width: 52px; height: 18px;
+  background: linear-gradient(to bottom, #f0f0f0, #b8b8b8);
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+  pointer-events: none; transition: box-shadow 0.12s;
+}
+.fader-thumb::after {
+  content: ''; position: absolute;
+  top: 50%; left: 6px; right: 6px;
+  height: 2px; background: #888;
+  transform: translateY(-1px); border-radius: 1px;
+}
+.fader-track.active .fader-thumb {
+  background: linear-gradient(to bottom, #fff, #ddd);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 0 12px rgba(0,170,255,0.5);
+}
+
+/* ── Value ── */
+.value-display {
+  font-family: 'Consolas', 'SF Mono', 'Menlo', monospace;
+  font-size: 14px; color: #00aaff;
+  background: #0a0a0e; padding: 4px 8px;
+  border-radius: 3px; text-align: center;
+  min-width: 50px; flex-shrink: 0;
+}
+
+/* ── XY ── */
+.xy-section {
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 6px; min-height: 0;
+}
+.xy-pad-container {
+  display: flex; flex-direction: column;
+  gap: 3px; min-height: 0;
+}
+.xy-header {
+  display: flex; justify-content: space-between;
+  align-items: center; flex-shrink: 0;
+}
+.xy-label {
+  font-size: 12px; font-weight: 700;
+  color: #666; letter-spacing: 0.5px;
+}
+.xy-values {
+  font-family: 'Consolas', 'SF Mono', 'Menlo', monospace;
+  font-size: 12px; color: #00aaff;
+}
+.xy-pad {
+  flex: 1; border-radius: 6px;
+  background: #08080e; border: 1px solid #222233;
+  min-height: 0; position: relative; cursor: crosshair;
+  transition: border-color 0.12s; overflow: hidden;
+  background-image:
+    repeating-linear-gradient(90deg, transparent, transparent calc(12.5% - 0.5px), #151522 calc(12.5% - 0.5px), #151522 calc(12.5% + 0.5px), transparent calc(12.5% + 0.5px)),
+    repeating-linear-gradient(0deg, transparent, transparent calc(12.5% - 0.5px), #151522 calc(12.5% - 0.5px), #151522 calc(12.5% + 0.5px), transparent calc(12.5% + 0.5px));
+}
+.xy-pad.active {
+  border-color: #00aaff;
+  box-shadow: 0 0 12px rgba(0,170,255,0.15);
+}
+.xy-pad .xy-center-h, .xy-pad .xy-center-v {
+  position: absolute; background: #222238; pointer-events: none;
+}
+.xy-pad .xy-center-h { left: 0; right: 0; top: 50%; height: 1px; }
+.xy-pad .xy-center-v { top: 0; bottom: 0; left: 50%; width: 1px; }
+.xy-pad .xy-cross-h, .xy-pad .xy-cross-v {
+  position: absolute; background: rgba(0,170,255,0.25); pointer-events: none;
+}
+.xy-pad .xy-cross-h { left: 0; right: 0; height: 1px; }
+.xy-pad .xy-cross-v { top: 0; bottom: 0; width: 1px; }
+.xy-pad .xy-dot {
+  position: absolute; width: 12px; height: 12px;
+  border-radius: 50%; background: #00aaff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 12px rgba(0,170,255,0.4);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* ── Button Panel ── */
+.button-panel {
+  background: #1a1a1e; border-radius: 8px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px; align-content: center;
+}
+.btn-group { display: flex; flex-direction: column; gap: 6px; }
+.btn-group-label {
+  font-size: 11px; font-weight: 700;
+  color: #555; letter-spacing: 1.5px; text-transform: uppercase;
+}
+.btn-group-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn {
+  border: 1px solid #333; border-radius: 5px;
+  background: #1e1e22; color: #666;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.1s;
+  height: 42px; min-width: 60px; padding: 0 12px; flex: 1;
+}
+.btn:hover { border-color: #555; }
+
+.btn-toggle.active {
+  background: #0066cc; border-color: #0077ee; color: #fff;
+  box-shadow: 0 0 12px rgba(0,102,204,0.3);
+}
+.btn-trigger.active {
+  background: #cc4400; border-color: #ee5500; color: #fff;
+  box-shadow: 0 0 12px rgba(204,68,0,0.4);
+}
+.btn-preset { background: #1a1e1a; border-color: #2a332a; color: #668866; }
+.btn-preset:hover { background: #222822; border-color: #3a443a; }
+.btn-preset.active {
+  background: #226622; border-color: #33aa33; color: #aaffaa;
+  box-shadow: 0 0 10px rgba(34,102,34,0.4);
+}
+
+::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top-section">
+    <div class="sliders-section" id="sliders"></div>
+    <div class="xy-section" id="xyPads"></div>
+  </div>
+  <div class="button-panel" id="buttonPanel"></div>
+</div>
+
+<script>
+const NUM_SLIDERS = 10;
+const NUM_XY_PADS = 3;
+const NUM_TOGGLES = 6;
+const NUM_TRIGGERS = 4;
+
+const state = {
+  sliders: Array(NUM_SLIDERS).fill(0),
+  xyPads: Array.from({ length: NUM_XY_PADS }, () => ({ x: 0.5, y: 0.5 })),
+  toggles: Array(NUM_TOGGLES).fill(0),
+  triggers: Array(NUM_TRIGGERS).fill(0),
+};
+
+const sliderEls = [];
+const xyCanvases = [];
+const toggleBtns = [];
+let activePreset = -1;
+let ws = null;
+
+function clamp(v) { return Math.max(0, Math.min(1, v)); }
+
+// ── Sliders ──
+function buildSliders() {
+  const container = document.getElementById('sliders');
+  for (let i = 0; i < NUM_SLIDERS; i++) {
+    const strip = document.createElement('div');
+    strip.className = 'slider-strip';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'slider-label';
+    lbl.textContent = `S${i + 1}`;
+    strip.appendChild(lbl);
+
+    const fc = document.createElement('div');
+    fc.className = 'fader-container';
+    const track = document.createElement('div');
+    track.className = 'fader-track';
+    const fill = document.createElement('div');
+    fill.className = 'fader-fill';
+    const thumb = document.createElement('div');
+    thumb.className = 'fader-thumb';
+    track.appendChild(fill);
+    track.appendChild(thumb);
+    fc.appendChild(track);
+    strip.appendChild(fc);
+
+    const val = document.createElement('div');
+    val.className = 'value-display';
+    val.textContent = '0.00';
+    strip.appendChild(val);
+
+    container.appendChild(strip);
+
+    const ref = { track, fill, thumb, val, index: i };
+    sliderEls.push(ref);
+
+    let dragging = false;
+    function calc(e) {
+      const r = track.getBoundingClientRect();
+      return clamp(1 - (e.clientY - r.top) / r.height);
+    }
+    track.addEventListener('mousedown', e => {
+      dragging = true;
+      track.classList.add('active');
+      setSliderVal(ref, calc(e));
+    });
+    document.addEventListener('mousemove', e => { if (dragging) setSliderVal(ref, calc(e)); });
+    document.addEventListener('mouseup', () => { if (dragging) { dragging = false; track.classList.remove('active'); } });
+    track.addEventListener('dblclick', () => setSliderVal(ref, 0));
+
+    updateSliderUI(ref, 0);
+  }
+}
+
+function setSliderVal(ref, v) {
+  state.sliders[ref.index] = v;
+  updateSliderUI(ref, v);
+  broadcastState();
+}
+
+function updateSliderUI(ref, v) {
+  const p = (v * 100).toFixed(1);
+  ref.fill.style.height = p + '%';
+  ref.thumb.style.bottom = `calc(${p}% - 9px)`;
+  ref.val.textContent = v.toFixed(2);
+}
+
+// ── XY Pads (div-based for TD CEF compatibility) ──
+function buildXYPads() {
+  const container = document.getElementById('xyPads');
+  for (let i = 0; i < NUM_XY_PADS; i++) {
+    const pc = document.createElement('div');
+    pc.className = 'xy-pad-container';
+    const hdr = document.createElement('div');
+    hdr.className = 'xy-header';
+    const lbl = document.createElement('div');
+    lbl.className = 'xy-label';
+    lbl.textContent = `XY ${i + 1}`;
+    const vals = document.createElement('div');
+    vals.className = 'xy-values';
+    vals.textContent = 'X:0.50 Y:0.50';
+    hdr.appendChild(lbl); hdr.appendChild(vals); pc.appendChild(hdr);
+
+    const pad = document.createElement('div');
+    pad.className = 'xy-pad';
+    // Center grid lines
+    const ch = document.createElement('div'); ch.className = 'xy-center-h'; pad.appendChild(ch);
+    const cv = document.createElement('div'); cv.className = 'xy-center-v'; pad.appendChild(cv);
+    // Crosshair lines (move with position)
+    const crossH = document.createElement('div'); crossH.className = 'xy-cross-h'; pad.appendChild(crossH);
+    const crossV = document.createElement('div'); crossV.className = 'xy-cross-v'; pad.appendChild(crossV);
+    // Dot
+    const dot = document.createElement('div'); dot.className = 'xy-dot'; pad.appendChild(dot);
+
+    pc.appendChild(pad); container.appendChild(pc);
+
+    const ref = { pad, crossH, crossV, dot, values: vals, index: i };
+    xyCanvases.push(ref);
+    updateXYUI(ref, 0.5, 0.5);
+
+    let dragging = false;
+    function calc(e) {
+      const r = pad.getBoundingClientRect();
+      return { x: clamp((e.clientX - r.left) / r.width), y: clamp(1 - (e.clientY - r.top) / r.height) };
+    }
+    pad.addEventListener('mousedown', e => {
+      dragging = true; pad.classList.add('active');
+      const {x,y} = calc(e); doSetXY(ref, x, y);
+    });
+    document.addEventListener('mousemove', e => { if (dragging) { const {x,y} = calc(e); doSetXY(ref,x,y); }});
+    document.addEventListener('mouseup', () => { if (dragging) { dragging = false; pad.classList.remove('active'); }});
+  }
+}
+
+function doSetXY(ref, x, y) {
+  state.xyPads[ref.index].x = x;
+  state.xyPads[ref.index].y = y;
+  ref.values.textContent = `X:${x.toFixed(2)} Y:${y.toFixed(2)}`;
+  updateXYUI(ref, x, y);
+  broadcastState();
+}
+
+function updateXYUI(ref, x, y) {
+  const pxPct = (x * 100).toFixed(2) + '%';
+  const pyPct = ((1 - y) * 100).toFixed(2) + '%';
+  ref.crossH.style.top = pyPct;
+  ref.crossV.style.left = pxPct;
+  ref.dot.style.left = pxPct;
+  ref.dot.style.top = pyPct;
+}
+
+// ── Button Panel ──
+function buildButtons() {
+  const panel = document.getElementById('buttonPanel');
+
+  const tg = makeGroup('TOGGLE');
+  for (let i = 0; i < NUM_TOGGLES; i++) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-toggle'; b.textContent = `T${i+1}`;
+    b.addEventListener('click', () => {
+      state.toggles[i] ^= 1; b.classList.toggle('active', !!state.toggles[i]); broadcastState();
+    });
+    toggleBtns.push(b); tg.row.appendChild(b);
+  }
+  panel.appendChild(tg.group);
+
+  const tr = makeGroup('TRIGGER');
+  for (let i = 0; i < NUM_TRIGGERS; i++) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-trigger'; b.textContent = `!${i+1}`;
+    b.addEventListener('pointerdown', () => { state.triggers[i] = 1; b.classList.add('active'); broadcastState(); });
+    b.addEventListener('pointerup', () => { state.triggers[i] = 0; b.classList.remove('active'); broadcastState(); });
+    b.addEventListener('pointerleave', () => { if (state.triggers[i]) { state.triggers[i] = 0; b.classList.remove('active'); broadcastState(); }});
+    tr.row.appendChild(b);
+  }
+  panel.appendChild(tr.group);
+
+  const pr = makeGroup('PRESET');
+  const presets = [
+    { name: 'A', data: { s1:.8,s2:.6,s3:.4,s4:.2,s5:.7,s6:.5,s7:.3,s8:.9,s9:.1,s10:.5 }},
+    { name: 'B', data: { s1:1,s2:0,s3:1,s4:0,s5:1,s6:0,s7:1,s8:0,s9:1,s10:0 }},
+    { name: 'C', data: { s1:.5,s2:.5,s3:.5,s4:.5,s5:.5,s6:.5,s7:.5,s8:.5,s9:.5,s10:.5 }},
+  ];
+  presets.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'btn btn-preset'; b.textContent = p.name;
+    b.addEventListener('click', () => {
+      activePreset = activePreset === i ? -1 : i;
+      pr.row.querySelectorAll('.btn-preset').forEach((pb, j) => pb.classList.toggle('active', j === activePreset));
+      if (activePreset >= 0) window.loadPreset(p.data);
+    });
+    pr.row.appendChild(b);
+  });
+  const rb = document.createElement('button');
+  rb.className = 'btn btn-preset'; rb.textContent = 'Reset';
+  rb.style.color = '#886655'; rb.style.borderColor = '#332222';
+  rb.addEventListener('click', () => {
+    state.sliders.fill(0); state.toggles.fill(0); state.triggers.fill(0);
+    state.xyPads.forEach(p => { p.x = 0.5; p.y = 0.5; });
+    activePreset = -1; refreshAll(); broadcastState();
+  });
+  pr.row.appendChild(rb);
+  panel.appendChild(pr.group);
+}
+
+function makeGroup(label) {
+  const group = document.createElement('div'); group.className = 'btn-group';
+  const lbl = document.createElement('div'); lbl.className = 'btn-group-label'; lbl.textContent = label;
+  const row = document.createElement('div'); row.className = 'btn-group-row';
+  group.appendChild(lbl); group.appendChild(row);
+  return { group, row };
+}
+
+function refreshAll() {
+  sliderEls.forEach(r => updateSliderUI(r, state.sliders[r.index]));
+  toggleBtns.forEach((b, i) => b.classList.toggle('active', !!state.toggles[i]));
+  xyCanvases.forEach(ref => {
+    const p = state.xyPads[ref.index];
+    ref.values.textContent = `X:${p.x.toFixed(2)} Y:${p.y.toFixed(2)}`;
+    updateXYUI(ref, p.x, p.y);
+  });
+}
+
+// ── TD Communication ──
+function getFlatValues() {
+  const f = {};
+  state.sliders.forEach((v, i) => { f[`s${i+1}`] = +v.toFixed(4); });
+  state.xyPads.forEach((p, i) => { f[`xy${i+1}_x`] = +p.x.toFixed(4); f[`xy${i+1}_y`] = +p.y.toFixed(4); });
+  state.toggles.forEach((v, i) => { f[`t${i+1}`] = v; });
+  state.triggers.forEach((v, i) => { f[`trig${i+1}`] = v; });
+  return f;
+}
+
+function broadcastState() {
+  const json = JSON.stringify(getFlatValues());
+  document.title = json;
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(json);
+}
+
+function initWS() {
+  try {
+    ws = new WebSocket('ws://localhost:9980');
+    ws.onclose = () => { ws = null; setTimeout(initWS, 3000); };
+    ws.onerror = () => { ws = null; };
+  } catch(e) {}
+}
+
+// ── TD→HTML API ──
+window.getValues = () => getFlatValues();
+window.setSlider = (i, v) => { state.sliders[i] = clamp(v); updateSliderUI(sliderEls[i], state.sliders[i]); broadcastState(); };
+window.setXY = (i, x, y) => { doSetXY(xyCanvases[i], clamp(x), clamp(y)); };
+window.setToggle = (i, v) => { state.toggles[i] = v ? 1 : 0; toggleBtns[i]?.classList.toggle('active', !!v); broadcastState(); };
+window.loadPreset = (p) => {
+  Object.entries(p).forEach(([k, v]) => {
+    const sm = k.match(/^s(\d+)$/); if (sm) { window.setSlider(parseInt(sm[1])-1, v); return; }
+    const xm = k.match(/^xy(\d+)_(x|y)$/);
+    if (xm) { const i = parseInt(xm[1])-1; state.xyPads[i][xm[2]] = clamp(v); const r = xyCanvases[i]; if (r) { r.values.textContent = `X:${state.xyPads[i].x.toFixed(2)} Y:${state.xyPads[i].y.toFixed(2)}`; updateXYUI(r, state.xyPads[i].x, state.xyPads[i].y); } return; }
+    const tm = k.match(/^t(\d+)$/); if (tm) { window.setToggle(parseInt(tm[1])-1, v); }
+  });
+  broadcastState();
+};
+
+// ── Init ──
+buildSliders();
+buildXYPads();
+buildButtons();
+initWS();
+broadcastState();
+
+</script>
+</body>
+</html>

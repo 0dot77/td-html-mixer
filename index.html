@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TD HTML Mixer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #131316; color: #b0b0b0;
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh; padding: 60px 40px;
+}
+h1 { color: #fff; font-size: 28px; margin-bottom: 8px; }
+p.desc { color: #666; font-size: 14px; margin-bottom: 40px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+a.card {
+  display: block; text-decoration: none;
+  background: #1e1e22; border: 1px solid #2a2a2e;
+  border-radius: 10px; padding: 24px;
+  transition: all 0.15s;
+}
+a.card:hover {
+  border-color: #00aaff;
+  box-shadow: 0 0 20px rgba(0,170,255,0.1);
+  transform: translateY(-2px);
+}
+.card-title { color: #fff; font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.card-desc { color: #888; font-size: 13px; line-height: 1.5; }
+.card-tag {
+  display: inline-block; margin-top: 12px;
+  font-size: 11px; color: #00aaff; background: #0a1520;
+  padding: 3px 8px; border-radius: 3px;
+}
+</style>
+</head>
+<body>
+<h1>TD HTML Mixer</h1>
+<p class="desc">TouchDesigner Web Render TOP controllers. Pick a layout, paste the URL into your Web Render TOP.</p>
+<div class="grid">
+  <a class="card" href="basic/">
+    <div class="card-title">Basic</div>
+    <div class="card-desc">10 sliders + 3 XY pads + 6 toggles + 4 triggers + presets. General purpose controller.</div>
+    <span class="card-tag">S10 / XY3 / T6 / TR4</span>
+  </a>
+</div>
+</body>
+</html>
